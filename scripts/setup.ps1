@@ -40,7 +40,7 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 $venvPy = Join-Path $root ".venv\Scripts\python.exe"
 & $venvPy -m pip install --upgrade pip --quiet
 Write-Host "==> Installiere Backend-Abhängigkeiten" -ForegroundColor Cyan
-& $venvPy -m pip install -r backend\requirements-dev.txt --quiet
+& $venvPy -m pip install -r backend\requirements.txt --quiet
 if ($LASTEXITCODE -ne 0) { throw "pip install fehlgeschlagen" }
 
 Write-Host "==> Installiere Frontend-Abhängigkeiten und baue Frontend" -ForegroundColor Cyan
