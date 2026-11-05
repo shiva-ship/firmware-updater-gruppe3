@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  --color-navy-950: #040f20;
+  --color-navy-900: #071a33;
+  --color-navy-800: #0b2547;
+  --color-navy-700: #12345f;
+  --color-navy-600: #1b4778;
+  --color-brand-cyan: #22d3ee;
+  --color-brand-teal: #14b8a6;
+
+  --animate-fade-in: fade-in 0.35s ease-out both;
+  --animate-rise: rise 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  --animate-shake: shake 0.4s ease-in-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  body {
+    @apply bg-slate-100 text-slate-800 font-sans;
+  }
+  ::selection {
+    @apply bg-cyan-200 text-navy-900;
+  }
+}
+
+/* Technisches Raster für den Login-Hintergrund */
+.industrial-grid {
+  background-color: var(--color-navy-950);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 70% 10%, rgb(34 211 238 / 0.16), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 10% 90%, rgb(20 184 166 / 0.14), transparent 60%),
+    linear-gradient(rgb(148 163 184 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(148 163 184 / 0.07) 1px, transparent 1px);
+  background-size: auto, auto, 40px 40px, 40px 40px;
+}
+
+/* Dezentes Leiterbahn-Muster für dunkle Kopfbereiche */
+.circuit-pattern {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgb(34 211 238 / 0.25) 1px, transparent 1.5px),
+    linear-gradient(90deg, rgb(34 211 238 / 0.08) 1px, transparent 1px),
+    linear-gradient(rgb(34 211 238 / 0.05) 1px, transparent 1px);
+  background-size: 24px 24px, 96px 96px, 96px 96px;
+  mask-image: linear-gradient(90deg, transparent, black 40%, black);
+}
+
+.brand-gradient-text {
+  background: linear-gradient(90deg, var(--color-brand-cyan), var(--color-brand-teal));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
