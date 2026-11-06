@@ -16,35 +16,87 @@ TODO before relying on this in the demo:
 """
 
 from driver_base import DriverBase
+import re
 import time
 import requests
 
 
 class WeidmuellerSwitchDriver(DriverBase):
-    """Weidmüller IE-SW-AL06LM-4TX-2SC Ethernet switch."""
+    """Weidmüller IE-SW-AL06LM-4TX-2SC Ethernet switch.
+
+    Status info (firmware version, serial, MAC) is parsed off /main.htm,
+    which embeds it as JS calls: MT(5,"v1.05") = Firmware Version,
+    MT(8,"020095C00031") = Serial Number (field indices confirmed from a
+    live capture of that page: 0=Name,1=Description,2=Location,3=Contact,
+    4=SNMP OID,5=Firmware Version,6=Kernel Version,7=MAC Address,8=Serial).
+    """
 
     HOST = "192.168.0.110"
     USERNAME = "admin"
     PASSWORD = "Detmold"
     UPLOAD_URL = f"http://{HOST}/web_upgrade"
+    INFO_URL = f"http://{HOST}/main.htm"
 
     def __init__(self):
         self.session = requests.Session()
         self.session.auth = (self.USERNAME, self.PASSWORD)  # swap for session login if needed, see TODO above
 
     def update(self, firmware_path: str) -> dict:
-        return self._upload_with_retry(
+        result = self._upload_with_retry(
             self.UPLOAD_URL,
             firmware_path,
             field_name="firmware",
             session=self.session,
             verify=True,
         )
+        if result["status"] == "ok":
+            print("[Switch] Update accepted - system restart in progress...")
+            self._wait_for_reboot()
+            print("[Switch] Update successful - device back online.")
+        return result
+
+    def _wait_for_reboot(self, down_timeout=60, up_timeout=180, poll_interval=5):
+        """Mirrors the Steuerung's reboot-wait logic: confirm the device
+        actually drops off, then wait for it to come back before declaring
+        success - never trust the upload HTTP response alone."""
+        went_down = False
+        down_deadline = time.time() + down_timeout
+        while time.time() < down_deadline:
+            try:
+                self.session.get(f"http://{self.HOST}/", timeout=3)
+                time.sleep(poll_interval)
+            except requests.exceptions.RequestException:
+                went_down = True
+                break
+        if not went_down:
+            print("[Switch] WARNING: device never appeared to go down - "
+                  "continuing to check for it coming back anyway.")
+
+        up_deadline = time.time() + up_timeout
+        while time.time() < up_deadline:
+            try:
+                resp = self.session.get(f"http://{self.HOST}/", timeout=5)
+                if resp.status_code in (200, 401, 403):
+                    return
+            except requests.exceptions.RequestException:
+                pass
+            time.sleep(poll_interval)
+
+        raise RuntimeError(
+            f"Switch did not come back online within {up_timeout}s after update - "
+            f"halting, do not assume success"
+        )
 
     def get_status(self) -> str:
         try:
-            resp = self.session.get(f"http://{self.HOST}/", timeout=10)
-            return f"reachable (HTTP {resp.status_code})"
+            resp = self.session.get(self.INFO_URL, timeout=10)
+            if resp.status_code != 200:
+                return f"reachable (HTTP {resp.status_code})"
+            fw_match = re.search(r'MT\(5,\s*"([^"]*)"\)', resp.text)
+            serial_match = re.search(r'MT\(8,\s*"([^"]*)"\)', resp.text)
+            fw = fw_match.group(1) if fw_match else "unknown"
+            serial = serial_match.group(1) if serial_match else "unknown"
+            return f"reachable - firmware {fw}, serial {serial}"
         except requests.exceptions.RequestException as e:
             return f"unreachable ({e})"
 
