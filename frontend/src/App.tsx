@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api, onUnauthorized } from "./api/client";
-import type { User } from "./api/types";
-import { AppShell } from "./components/AppShell";
-import { BrandMark, Spinner } from "./components/ui";
+import type { SystemInfo, User } from "./api/types";
+import { AppShell, type View } from "./components/AppShell";
+import { Logo, Spinner } from "./components/ui";
+import { FirmwarePage } from "./pages/FirmwarePage";
 import { LoginPage } from "./pages/LoginPage";
 import { SetupPage } from "./pages/SetupPage";
 import { WorkspacePage } from "./pages/WorkspacePage";
@@ -21,6 +22,24 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [system, setSystem] = useState<SystemInfo | null>(null);
+  const [view, setView] = useState<View>("devices");
+  const [ready, setReady] = useState(false);
+  const onReadyChange = useCallback((value: boolean) => {
+    setReady(value);
+    if (!value) setView("devices");
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setSystem(null);
+      return;
+    }
+    api
+      .getSystem()
+      .then(setSystem)
+      .catch(() => setSystem(null));
+  }, [user]);
 
   const resetToLogin = useCallback((message: string | null) => {
     setUser(null);
@@ -61,8 +80,8 @@ export default function App() {
 
   if (booting) {
     return (
-      <div className="industrial-grid flex min-h-screen flex-col items-center justify-center gap-4 text-slate-400">
-        <BrandMark className="h-12 w-12 animate-pulse" />
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-muted">
+        <Logo className="h-9" />
         <Spinner className="h-5 w-5" />
       </div>
     );
@@ -94,8 +113,12 @@ export default function App() {
   }
 
   return (
-    <AppShell user={user} onLogout={logout} loggingOut={loggingOut}>
-      <WorkspacePage />
+    <AppShell user={user} mode={system?.mode ?? null} view={view} onNavigate={setView} showFirmware={ready} onLogout={logout} loggingOut={loggingOut}>
+      {/* Beide Ansichten bleiben gemountet, damit Plan und laufender Auftrag erhalten bleiben. */}
+      <div hidden={view !== "devices"}>
+        <WorkspacePage system={system} active={view === "devices"} onReadyChange={onReadyChange} />
+      </div>
+      {ready && view === "firmware" && <FirmwarePage system={system} />}
     </AppShell>
   );
 }

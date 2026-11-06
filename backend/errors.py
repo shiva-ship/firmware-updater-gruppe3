@@ -82,3 +82,39 @@ class DatabaseLimitReached(AppError):
     status_code = 409
     code = "database_limit_reached"
     message = "Maximale Anzahl gleichzeitig geöffneter Datenbanken erreicht. Bitte schließen Sie zuerst eine Datenbank."
+
+
+class DeviceNotFound(AppError):
+    status_code = 404
+    code = "device_not_found"
+    message = "Das Gerät wurde in der Datenbank nicht gefunden."
+
+
+class DeviceIncomplete(AppError):
+    status_code = 400
+    code = "device_incomplete"
+    message = "Im KeePass-Eintrag fehlen URL (oder Feld base_url), Benutzername oder Passwort."
+
+
+class UnsupportedDevice(AppError):
+    status_code = 400
+    code = "unsupported_device"
+    message = "Für dieses Gerät ist kein Firmwareupdate verfügbar. Unterstützt werden Balluff-Master und ads-tec-Firewalls."
+
+
+class FirmwareFileNotFound(AppError):
+    status_code = 400
+    code = "firmware_file_not_found"
+    message = "Die Firmware-Datei wurde nicht gefunden oder passt nicht zum Gerätetyp."
+
+
+class FirmwareUpdateBusy(AppError):
+    status_code = 409
+    code = "firmware_update_busy"
+    message = "Für dieses Gerät läuft bereits ein Firmwareupdate."
+
+
+class FirmwareUpdateFailed(AppError):
+    status_code = 502
+    code = "firmware_update_failed"
+    message = "Das Firmwareupdate ist fehlgeschlagen."

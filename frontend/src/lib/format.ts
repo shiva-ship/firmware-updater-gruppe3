@@ -18,3 +18,12 @@ export function formatTime(iso: string | null): string {
 export function plural(count: number, one: string, many: string): string {
   return `${count.toLocaleString("de-DE")} ${count === 1 ? one : many}`;
 }
+
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return "–";
+  return new Date(iso).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+export function shortHash(hash: string): string {
+  return `${hash.slice(0, 12)}…${hash.slice(-6)}`;
+}

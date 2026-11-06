@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     data_dir: Path = Field(default_factory=_default_data_dir)
     frontend_dist: Path = PROJECT_ROOT / "frontend" / "dist"
+    firmware_dir: Path = PROJECT_ROOT / "Firmware"
 
     tls_certfile: Path | None = None
     tls_keyfile: Path | None = None
@@ -58,6 +59,19 @@ class Settings(BaseSettings):
     # Einmal-Schlüssel für die Ersteinrichtung im Browser (setzt start.ps1 automatisch).
     # Ohne Wert erzeugt der Server selbst einen und zeigt den Link in der Konsole an.
     setup_token: str | None = None
+
+    # DEMO: echte KeePass-Daten, simulierte Geräte – es wird nie ein Gerät kontaktiert.
+    # LIVE: vorhandene Python-Gerätetreiber, Zugriff auf das Industrienetz.
+    device_mode: Literal["demo", "live"] = "live"
+    # Wartezeit je simuliertem Arbeitsschritt im DEMO-Modus (Tests setzen 0).
+    demo_step_seconds: float = Field(default=0.8, ge=0)
+    plan_ttl_seconds: int = Field(default=1800, ge=60)
+    authorization_ttl_seconds: int = Field(default=180, ge=30)
+    # So lange bleiben die Login-Daten der Geräte nach "Daten aktualisieren" im Arbeitsspeicher,
+    # damit das Masterpasswort nur einmal eingegeben werden muss.
+    credential_ttl_seconds: int = Field(default=900, ge=60)
+    device_timeout_seconds: float = Field(default=10, ge=1)
+    reboot_timeout_seconds: float = Field(default=900, ge=30)
 
     max_upload_bytes: int = Field(default=20 * 1024 * 1024, ge=1024)
     max_databases_per_session: int = Field(default=5, ge=1)
@@ -82,6 +96,10 @@ class Settings(BaseSettings):
     @property
     def users_db_path(self) -> Path:
         return self.data_dir / "users.sqlite3"
+
+    @property
+    def firmware_manifest_path(self) -> Path:
+        return self.firmware_dir / "firmware-manifest.json"
 
     @property
     def upload_dir(self) -> Path:

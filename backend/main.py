@@ -24,7 +24,10 @@ from backend.config import Settings, get_settings
 from backend.db import Database
 from backend.errors import AppError
 from backend.services.auth import FailureRateLimiter, SessionStore, UserRepository
+from backend.services.firmware import FirmwareUpdater
+from backend.services.devices import DemoSimulator, default_adapters
 from backend.services.keepass import KeePassSessionManager, UploadStorage
+from backend.services.updates import UpdateService
 
 logger = logging.getLogger("backend")
 
@@ -49,12 +52,28 @@ CONTENT_SECURITY_POLICY = "; ".join(
 def build_services(settings: Settings) -> Services:
     db = Database(settings.users_db_path)
     storage = UploadStorage(settings.upload_dir)
-    keepass = KeePassSessionManager(storage, settings.max_databases_per_session)
+    keepass = KeePassSessionManager(storage, settings.max_databases_per_session, settings.credential_ttl_seconds)
+    firmware = FirmwareUpdater(settings.firmware_dir, settings.firmware_manifest_path)
+    updates = UpdateService(
+        mode=settings.device_mode,
+        keepass=keepass,
+        firmware=firmware,
+        adapters=default_adapters(settings.device_timeout_seconds, settings.reboot_timeout_seconds),
+        simulator=DemoSimulator(settings.demo_step_seconds),
+        plan_ttl_seconds=settings.plan_ttl_seconds,
+        authorization_ttl_seconds=settings.authorization_ttl_seconds,
+        credential_ttl_seconds=settings.credential_ttl_seconds,
+    )
+
+    def on_session_end(session_id: str) -> None:
+        updates.forget_session(session_id)
+        keepass.close_all_for_session(session_id)
+
     sessions = SessionStore(
         db,
         idle_seconds=settings.session_idle_minutes * 60,
         absolute_seconds=settings.session_absolute_hours * 3600,
-        on_session_end=keepass.close_all_for_session,
+        on_session_end=on_session_end,
     )
     return Services(
         settings=settings,
@@ -72,6 +91,8 @@ def build_services(settings: Settings) -> Services:
         unlock_limiter=FailureRateLimiter(
             settings.unlock_max_attempts, settings.unlock_window_seconds, settings.unlock_lockout_seconds
         ),
+        firmware=firmware,
+        updates=updates,
     )
 
 
@@ -88,6 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         services.settings.data_dir.mkdir(parents=True, exist_ok=True)
         Database(settings.users_db_path).init_schema()
         services.storage.prepare()
+        logger.info("Gerätemodus: %s", "LIVE – Zugriff auf das Industrienetz" if settings.device_mode == "live" else "DEMO – simulierte Geräte, keine Geräteänderungen")
         # Nach einem Neustart existieren keine In-Memory-Datenbanksitzungen mehr:
         # verwaiste Uploads löschen und alte Anmeldesitzungen beenden.
         removed = services.storage.wipe()

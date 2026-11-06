@@ -68,7 +68,6 @@ async def upload_database(
 
 
 @router.post("/{db_id}/refresh", response_model=DatabaseOut)
-@router.post("/{db_id}/unlock", response_model=DatabaseOut, include_in_schema=False)  # Alias aus v0.1
 async def refresh_database(
     db_id: str, body: UnlockRequest, session: Session = Depends(require_csrf), services: Services = Depends(get_services)
 ):
@@ -99,4 +98,5 @@ def get_tree(db_id: str, session: Session = Depends(get_session), services: Serv
 @router.delete("/{db_id}", status_code=status.HTTP_204_NO_CONTENT)
 def close_database(db_id: str, session: Session = Depends(require_csrf), services: Services = Depends(get_services)):
     services.keepass.close(db_id, session.session_id, session.user.id)
+    services.updates.forget_database(session.session_id, db_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

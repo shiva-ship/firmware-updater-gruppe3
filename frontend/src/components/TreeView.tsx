@@ -1,99 +1,109 @@
-import { ChevronRight, Folder, FolderOpen, Network, Router, StickyNote } from "lucide-react";
-import { memo } from "react";
+import { ChevronRight, Cpu, FileLock2, Folder, FolderOpen, Network, Router, Server } from "lucide-react";
+import { memo, type ReactNode } from "react";
 
-import type { EntryNode, GroupNode } from "../api/types";
-import { cx } from "./ui";
+import type { DeviceStatus, DeviceType, EntryNode, GroupNode } from "../api/types";
+import { vendorLabel } from "../lib/labels";
+import { groupState } from "../lib/selection";
+import { Checkbox, cx } from "./ui";
 
 interface TreeContext {
   expanded: Set<string>;
-  onToggle: (id: string) => void;
+  onToggleExpand: (id: string) => void;
   forceExpanded: boolean;
   query: string;
-  selectedId: string | null;
-  onSelect: (entry: EntryNode) => void;
+  focusedId: string | null;
+  onFocus: (entry: EntryNode) => void;
+  selected: ReadonlySet<string>;
+  onToggleEntry: (id: string) => void;
+  onToggleGroup: (group: GroupNode) => void;
+  inventory: Record<string, DeviceStatus>;
 }
 
 interface TreeViewProps extends TreeContext {
   root: GroupNode;
   rootLabel: string;
-  rootSubtitle: string;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  rootActions?: ReactNode;
 }
 
-/** Hebt Treffer hervor, ohne HTML einzuschleusen (React escaped alle Texte). */
+/** Breite der Seriennummern-Spalte – auch für die Kopfzeile über dem Baum verwendet. */
+export const SERIAL_COL = "w-[128px] shrink-0 text-left";
+
+const DEVICE_ICON: Record<DeviceType, typeof Router> = { adstec: Router, balluff: Network, siemens: Cpu };
+
 function Highlight({ text, query }: { text: string; query: string }) {
   const q = query.trim().toLocaleLowerCase("de-DE");
-  if (!q) return <>{text}</>;
-  const index = text.toLocaleLowerCase("de-DE").indexOf(q);
+  const index = q ? text.toLocaleLowerCase("de-DE").indexOf(q) : -1;
   if (index < 0) return <>{text}</>;
   return (
     <>
       {text.slice(0, index)}
-      <mark className="rounded-sm bg-cyan-200 px-0.5 text-navy-950">{text.slice(index, index + q.length)}</mark>
+      <mark className="bg-ads-cyan-light text-ink">{text.slice(index, index + q.length)}</mark>
       {text.slice(index + q.length)}
     </>
   );
 }
 
-function CountBadge({ group, dark }: { group: GroupNode; dark?: boolean }) {
-  const total = group.total_entry_count;
+function dotColor(status: DeviceStatus | undefined) {
+  if (!status || status.connection === "not_checked") return "bg-slate-300";
+  return status.connection === "online" ? "bg-emerald-600" : "bg-red-600";
+}
+
+/*
+ * Baumlinien: Jede Unterebene hat eine senkrechte Linie (border-l am <ul>),
+ * jeder Knoten einen waagrechten Abzweig (::before). Beim letzten Knoten
+ * verdeckt ::after die senkrechte Linie unterhalb des Abzweigs.
+ */
+const branch = cx(
+  "relative",
+  "before:pointer-events-none before:absolute before:-left-3 before:top-4 before:w-3 before:border-t before:border-slate-300",
+  "last:after:pointer-events-none last:after:absolute last:after:-left-[13px] last:after:top-4 last:after:bottom-0 last:after:w-[2px] last:after:bg-white",
+);
+const childList = "ml-[19px] border-l border-slate-300 pl-3";
+
+/** Seriennummer als gut lesbares Kennzeichen in fester Spalte (siehe SERIAL_COL). */
+function SerialTag({ entry, query, focused }: { entry: EntryNode; query: string; focused: boolean }) {
+  if (!entry.serial_number) {
+    return (
+      <span className={cx(SERIAL_COL, "text-[11px] font-semibold", focused ? "text-white" : "text-amber-700")} title="Keine Seriennummer – kein Update möglich">
+        fehlt
+      </span>
+    );
+  }
+  const duplicate = entry.serial_status === "duplicate";
   return (
-    <span
-      title={`${group.entry_count} direkt · ${total} insgesamt`}
-      className={cx(
-        "ml-auto shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px] font-semibold tabular-nums",
-        dark
-          ? "bg-white/10 text-brand-cyan ring-1 ring-white/15"
-          : total > 0
-            ? "bg-navy-900/5 text-navy-700 ring-1 ring-navy-900/10"
-            : "text-slate-400 ring-1 ring-slate-200",
-      )}
-    >
-      {total}
+    <span className={SERIAL_COL} title={duplicate ? "Seriennummer mehrfach vergeben – kein Update möglich" : `Seriennummer ${entry.serial_number}`}>
+      <span
+        className={cx(
+          "inline-block max-w-full truncate rounded-sm px-1.5 py-px font-mono text-[12px] font-medium tracking-wide ring-1 ring-inset",
+          focused ? "bg-white text-ads-blue ring-white" : duplicate ? "bg-red-50 text-red-800 ring-red-300" : "bg-ads-blue-light text-ads-blue ring-ads-blue/20",
+        )}
+      >
+        <Highlight text={entry.serial_number} query={query} />
+      </span>
     </span>
   );
 }
 
-/* Verbindungslinien: senkrechte Linie am <ul>, waagrechter Abzweig je <li>. */
-const branch =
-  "relative before:pointer-events-none before:absolute before:-left-[13px] before:top-[19px] before:w-[11px] before:border-t before:border-slate-300";
-
 const EntryRow = memo(function EntryRow({ entry, ctx }: { entry: EntryNode; ctx: TreeContext }) {
-  const selected = ctx.selectedId === entry.id;
+  const focused = ctx.focusedId === entry.id;
+  const Icon = entry.device_type ? DEVICE_ICON[entry.device_type] : Server;
   return (
-    <li role="treeitem" aria-selected={selected} className={branch}>
-      <button
-        type="button"
-        onClick={() => ctx.onSelect(entry)}
-        className={cx(
-          "group flex min-h-[38px] w-full items-center gap-2.5 rounded-md border-l-2 py-1 pl-2 pr-2 text-left transition-colors",
-          "focus-visible:outline-2 focus-visible:outline-cyan-500",
-          selected ? "border-brand-cyan bg-cyan-50" : "border-transparent hover:bg-slate-50",
-        )}
+    <li role="treeitem" aria-selected={ctx.selected.has(entry.id)} className={branch}>
+      <div
+        onClick={() => ctx.onFocus(entry)}
+        title={`${entry.title} · ${vendorLabel(entry.device_type)}`}
+        className={cx("flex h-8 cursor-pointer items-center gap-2 rounded px-1.5", focused ? "bg-ads-blue text-white" : "hover:bg-ads-blue-light")}
       >
-        <span
-          className={cx(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded",
-            selected ? "bg-navy-900 text-brand-cyan" : "bg-slate-100 text-navy-700 group-hover:bg-navy-900 group-hover:text-brand-cyan",
-          )}
-        >
-          <Router className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-navy-900">
+        <Checkbox checked={ctx.selected.has(entry.id)} onChange={() => ctx.onToggleEntry(entry.id)} label={`${entry.title} auswählen`} />
+        <Icon className={cx("h-4 w-4 shrink-0", focused ? "text-white" : "text-ads-blue")} aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate text-[13px]">
           <Highlight text={entry.title} query={ctx.query} />
         </span>
-        {entry.serial_number ? (
-          <span className="flex shrink-0 items-center gap-1">
-            {entry.serial_source === "notes" && (
-              <StickyNote className="h-3 w-3 text-slate-400" aria-label="aus Notizen" />
-            )}
-            <span className="rounded bg-navy-900 px-1.5 py-0.5 font-mono text-[11px] font-medium tracking-wide text-cyan-100">
-              <Highlight text={entry.serial_number} query={ctx.query} />
-            </span>
-          </span>
-        ) : (
-          <span className="shrink-0 text-[11px] italic text-slate-400">Nicht hinterlegt</span>
-        )}
-      </button>
+        <span className={cx("h-2 w-2 shrink-0 rounded-full", dotColor(ctx.inventory[entry.id]))} aria-hidden="true" />
+        <SerialTag entry={entry} query={ctx.query} focused={focused} />
+      </div>
     </li>
   );
 });
@@ -102,34 +112,25 @@ const GroupRow = memo(function GroupRow({ group, ctx }: { group: GroupNode; ctx:
   const hasChildren = group.groups.length > 0 || group.entries.length > 0;
   const isOpen = hasChildren && (ctx.forceExpanded || ctx.expanded.has(group.id));
   const FolderIcon = isOpen ? FolderOpen : Folder;
+  const state = groupState(group, ctx.selected);
 
   return (
     <li role="treeitem" aria-expanded={hasChildren ? isOpen : undefined} className={branch}>
-      <button
-        type="button"
-        onClick={() => hasChildren && ctx.onToggle(group.id)}
-        disabled={!hasChildren}
-        className={cx(
-          "flex min-h-[38px] w-full items-center gap-2 rounded-md py-1 pl-1 pr-2 text-left transition-colors",
-          "focus-visible:outline-2 focus-visible:outline-cyan-500",
-          hasChildren ? "hover:bg-slate-50" : "cursor-default",
-        )}
-      >
-        <ChevronRight
-          className={cx(
-            "h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200",
-            isOpen && "rotate-90 text-cyan-600",
-            !hasChildren && "invisible",
-          )}
-          aria-hidden="true"
+      <div className="flex h-8 cursor-pointer items-center gap-1.5 rounded px-1 hover:bg-ads-blue-light" onClick={() => hasChildren && ctx.onToggleExpand(group.id)}>
+        <ChevronRight className={cx("h-4 w-4 shrink-0 text-muted", isOpen && "rotate-90", !hasChildren && "invisible")} aria-hidden="true" />
+        <Checkbox
+          checked={state === "all"}
+          indeterminate={state === "some"}
+          disabled={group.total_entry_count === 0}
+          onChange={() => ctx.onToggleGroup(group)}
+          label={`Alle Geräte in ${group.name} auswählen`}
         />
-        <FolderIcon className={cx("h-[18px] w-[18px] shrink-0", hasChildren ? "text-cyan-600" : "text-slate-300")} aria-hidden="true" />
-        <span className={cx("truncate text-[13px] font-semibold", hasChildren ? "text-navy-900" : "text-slate-400")}>{group.name}</span>
-        {!hasChildren && <span className="text-[11px] italic text-slate-400">leer</span>}
-        <CountBadge group={group} />
-      </button>
+        <FolderIcon className="h-4 w-4 shrink-0 text-amber-500" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{group.name}</span>
+        <span className="rounded-sm bg-surface px-1.5 font-mono text-[11px] tabular-nums text-muted">{group.total_entry_count}</span>
+      </div>
       {isOpen && (
-        <ul role="group" className="ml-[11px] border-l border-slate-300 pl-[13px] animate-fade-in">
+        <ul role="group" className={childList}>
           {group.groups.map((child) => (
             <GroupRow key={child.id} group={child} ctx={ctx} />
           ))}
@@ -142,20 +143,30 @@ const GroupRow = memo(function GroupRow({ group, ctx }: { group: GroupNode; ctx:
   );
 });
 
-export function TreeView({ root, rootLabel, rootSubtitle, ...ctx }: TreeViewProps) {
+export function TreeView({ root, rootLabel, collapsed = false, onToggleCollapsed, rootActions, ...ctx }: TreeViewProps) {
+  const state = groupState(root, ctx.selected);
   return (
-    <div>
-      <div className="flex items-center gap-3 rounded-lg bg-navy-900 px-3 py-2.5 text-white">
-        <span className="flex h-8 w-8 items-center justify-center rounded-md bg-gradient-to-br from-brand-cyan to-brand-teal text-navy-950">
-          <Network className="h-4 w-4" aria-hidden="true" />
-        </span>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold">{rootLabel}</div>
-          <div className="truncate text-[11px] text-slate-400">{rootSubtitle}</div>
-        </div>
-        <CountBadge group={root} dark />
+    <div className="p-2">
+      <div className="group flex h-8 cursor-pointer items-center gap-1.5 rounded px-1 hover:bg-ads-blue-light" onClick={onToggleCollapsed}>
+        <ChevronRight className={cx("h-4 w-4 shrink-0 text-muted", !collapsed && "rotate-90")} aria-hidden="true" />
+        <Checkbox
+          checked={state === "all"}
+          indeterminate={state === "some"}
+          disabled={root.total_entry_count === 0}
+          onChange={() => ctx.onToggleGroup(root)}
+          label="Alle Geräte auswählen"
+        />
+        <FileLock2 className="h-4 w-4 shrink-0 text-ads-blue" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{rootLabel}</span>
+        {rootActions && (
+          <span className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+            {rootActions}
+          </span>
+        )}
+        <span className="rounded-sm bg-surface px-1.5 font-mono text-[11px] tabular-nums text-muted">{root.total_entry_count}</span>
       </div>
-      <ul role="tree" aria-label="KeePass-Gruppen" className="ml-[19px] border-l border-slate-300 pl-[13px] pt-1">
+      {!collapsed && (
+      <ul role="tree" aria-label="Geräte" aria-multiselectable="true" className={childList}>
         {root.groups.map((group) => (
           <GroupRow key={group.id} group={group} ctx={ctx} />
         ))}
@@ -163,6 +174,7 @@ export function TreeView({ root, rootLabel, rootSubtitle, ...ctx }: TreeViewProp
           <EntryRow key={entry.id} entry={entry} ctx={ctx} />
         ))}
       </ul>
+      )}
     </div>
   );
 }

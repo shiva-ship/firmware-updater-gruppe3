@@ -1,4 +1,15 @@
-import type { DatabaseInfo, DatabaseList, SessionInfo, TreeResponse } from "./types";
+import type {
+  DatabaseInfo,
+  DatabaseList,
+  FirmwareFile,
+  FirmwarePackage,
+  Inventory,
+  SessionInfo,
+  SystemInfo,
+  TreeResponse,
+  UpdateJob,
+  UpdatePlan,
+} from "./types";
 
 /**
  * Das CSRF-Token wird ausschließlich im Arbeitsspeicher gehalten – niemals in
@@ -112,5 +123,57 @@ export const api = {
   },
   closeDatabase(id: string) {
     return request<void>(`/api/databases/${encodeURIComponent(id)}`, { method: "DELETE" });
+  },
+  listFirmwareFiles() {
+    return request<{ files: FirmwareFile[] }>("/api/firmware/files");
+  },
+  getSystem() {
+    return request<SystemInfo>("/api/system");
+  },
+  listPackages() {
+    return request<{ packages: FirmwarePackage[] }>("/api/firmware/packages");
+  },
+  releasePackage(body: { name: string; version: string; models: string[]; vendor_sha256: string | null; notes: string | null }) {
+    return request<FirmwarePackage>("/api/firmware/packages/release", { method: "POST", json: { ...body, confirm: true } });
+  },
+  revokePackage(name: string) {
+    return request<{ packages: FirmwarePackage[] }>("/api/firmware/packages/revoke", { method: "POST", json: { name } });
+  },
+  getNotes(dbId: string, entryId: string) {
+    return request<{ notes: string | null; redacted: boolean }>(
+      `/api/databases/${encodeURIComponent(dbId)}/entries/${encodeURIComponent(entryId)}/notes`,
+    );
+  },
+  getInventory(dbId: string) {
+    return request<Inventory>(`/api/databases/${encodeURIComponent(dbId)}/inventory`);
+  },
+  /** Erstellt den Updateplan. Das Masterpasswort wird nur im LIVE-Modus (Geräte auslesen) benötigt. */
+  prepareUpdates(dbId: string, entryIds: string[], masterPassword: string | null) {
+    return request<UpdatePlan>(`/api/databases/${encodeURIComponent(dbId)}/update-plans`, {
+      method: "POST",
+      json: masterPassword ? { entry_ids: entryIds, master_password: masterPassword } : { entry_ids: entryIds },
+    });
+  },
+  startDryRun(planId: string) {
+    return request<UpdateJob>(`/api/update-plans/${encodeURIComponent(planId)}/dry-run`, { method: "POST" });
+  },
+  /** Prüft das Masterpasswort serverseitig; zurück kommt nur eine kurzlebige Freigabe-ID. */
+  authorizePlan(planId: string, masterPassword: string | null) {
+    return request<{ authorization_id: string; expires_in_seconds: number }>(
+      `/api/update-plans/${encodeURIComponent(planId)}/authorize`,
+      { method: "POST", json: masterPassword ? { master_password: masterPassword } : {} },
+    );
+  },
+  executePlan(planId: string, authorizationId: string, approvePlcStopRun = false) {
+    return request<UpdateJob>(`/api/update-plans/${encodeURIComponent(planId)}/execute`, {
+      method: "POST",
+      json: { authorization_id: authorizationId, confirm: true, approve_plc_stop_run: approvePlcStopRun },
+    });
+  },
+  getJob(jobId: string) {
+    return request<UpdateJob>(`/api/update-jobs/${encodeURIComponent(jobId)}`);
+  },
+  cancelJob(jobId: string) {
+    return request<UpdateJob>(`/api/update-jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" });
   },
 };

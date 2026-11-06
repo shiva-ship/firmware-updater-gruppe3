@@ -4,3 +4,8 @@ pydantic>=2.9,<3.0
 pydantic-settings>=2.6,<3.0
 pykeepass>=4.1,<5.0
 argon2-cffi>=23.1
+# Für die Gerätetreiber (balluff_update.py, firewall_update.py)
+requests>=2.31,<3.0
+# Statusabfrage der Siemens-SPS (Siemens_PLC.py)
+python-snap7>=1.3,<3
+# Tests: pip install -r backend/requirements-dev.txt

@@ -18,9 +18,10 @@ interface UploadTileProps {
   uploading: boolean;
   onFile: (file: File) => void;
   onError: (message: string) => void;
+  large?: boolean;
 }
 
-export function UploadTile({ maxBytes, disabled, uploading, onFile, onError }: UploadTileProps) {
+export function UploadTile({ maxBytes, disabled, uploading, onFile, onError, large }: UploadTileProps) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -56,26 +57,22 @@ export function UploadTile({ maxBytes, disabled, uploading, onFile, onError }: U
       onDrop={onDrop}
       aria-label="KeePass-Datei auswählen oder hierher ziehen"
       className={cx(
-        "flex min-h-[188px] flex-col items-center justify-center rounded-xl border-2 border-dashed px-5 py-6 text-center transition-all",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500",
-        inactive ? "cursor-not-allowed border-slate-200 bg-slate-50 opacity-70" : "cursor-pointer",
-        !inactive && (dragging ? "scale-[1.01] border-cyan-500 bg-cyan-50" : "border-slate-300 bg-white hover:border-cyan-400 hover:bg-cyan-50/40"),
+        "flex rounded border-2 border-dashed",
+        large ? "min-h-[180px] flex-col items-center justify-center gap-3 p-6 text-center" : "min-h-[52px] items-center gap-3 px-3 py-2 text-left",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ads-cyan",
+        inactive ? "cursor-not-allowed border-line bg-surface opacity-70" : "cursor-pointer",
+        !inactive && (dragging ? "border-ads-cyan bg-ads-cyan-light" : "border-slate-400 bg-white hover:border-ads-blue hover:bg-ads-blue-light"),
       )}
     >
-      <span
-        className={cx(
-          "flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-navy-800 to-navy-600 text-brand-cyan shadow-md transition-transform",
-          dragging && "scale-110",
-        )}
-      >
-        {uploading ? <Spinner className="h-6 w-6" /> : <FilePlus2 className="h-6 w-6" aria-hidden="true" />}
+      {uploading ? <Spinner className="h-5 w-5 text-ads-blue" /> : <FilePlus2 className={cx("shrink-0 text-ads-blue", large ? "h-10 w-10" : "h-5 w-5")} aria-hidden="true" />}
+      <span className="min-w-0">
+        <span className="block text-[13px] font-semibold text-ink">
+          {uploading ? "Wird hochgeladen …" : dragging ? "Hier ablegen" : "Datei wählen oder hierher ziehen"}
+        </span>
+        <span className="block text-[11px] text-muted">
+          {disabled ? "Maximale Anzahl erreicht" : `.kdbx · max. ${formatBytes(maxBytes)}`}
+        </span>
       </span>
-      <p className="mt-3 text-sm font-semibold text-navy-900">
-        {uploading ? "Wird hochgeladen …" : dragging ? "Datei hier ablegen" : "KeePass-Datei hochladen"}
-      </p>
-      <p className="mt-1 text-xs text-slate-500">
-        {disabled ? "Maximale Anzahl erreicht" : `.kdbx hierher ziehen oder klicken · max. ${formatBytes(maxBytes)}`}
-      </p>
       <input
         ref={inputRef}
         type="file"

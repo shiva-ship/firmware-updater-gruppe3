@@ -10,7 +10,9 @@ from fastapi import Depends, Request
 from backend.config import Settings
 from backend.errors import CsrfFailed, NotAuthenticated
 from backend.services.auth import FailureRateLimiter, Session, SessionStore, UserRepository
+from backend.services.firmware import FirmwareUpdater
 from backend.services.keepass import KeePassSessionManager, UploadStorage
+from backend.services.updates import UpdateService
 
 SESSION_COOKIE = "asm_session"
 CSRF_HEADER = "X-CSRF-Token"
@@ -26,6 +28,8 @@ class Services:
     login_user_limiter: FailureRateLimiter
     login_ip_limiter: FailureRateLimiter
     unlock_limiter: FailureRateLimiter
+    firmware: FirmwareUpdater
+    updates: UpdateService
     # Nur gesetzt, solange noch kein Benutzer existiert (Ersteinrichtung im Browser).
     setup_token: str | None = None
 

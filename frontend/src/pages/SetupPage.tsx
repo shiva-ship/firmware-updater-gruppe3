@@ -3,7 +3,7 @@ import { useState, type FormEvent } from "react";
 
 import { ApiError, api } from "../api/client";
 import type { User } from "../api/types";
-import { Alert, BrandMark, Button, PasswordField, TextField } from "../components/ui";
+import { Alert, Button, Logo, PasswordField, TextField } from "../components/ui";
 
 interface SetupPageProps {
   setupToken: string | null;
@@ -44,23 +44,21 @@ export function SetupPage({ setupToken, minPasswordLength, onDone }: SetupPagePr
   }
 
   return (
-    <div className="industrial-grid flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="w-full max-w-[460px] animate-rise">
+    <div className="flex min-h-screen items-center justify-center bg-surface px-4 py-10">
+      <div className="w-full max-w-[460px]">
         <div className="mb-8 flex flex-col items-center text-center">
-          <BrandMark className="h-14 w-14 drop-shadow-[0_0_24px_rgba(34,211,238,0.35)]" />
-          <h1 className="mt-5 text-[26px] font-semibold tracking-tight text-white">
-            ADS-TEC <span className="brand-gradient-text">Security Manager</span>
-          </h1>
-          <p className="mt-1.5 text-sm text-slate-400">Ersteinrichtung</p>
+          <Logo className="h-10" />
+          <h1 className="mt-5 text-xl font-semibold text-ink">Firmware Management</h1>
+          <p className="mt-1 text-sm text-muted">Ersteinrichtung</p>
         </div>
 
         <form
           onSubmit={submit}
           noValidate
-          className="rounded-2xl border border-white/10 bg-navy-900/80 p-6 shadow-2xl shadow-black/40 backdrop-blur-xl sm:p-8"
+          className="rounded border border-line border-t-4 border-t-ads-blue bg-white p-6 shadow-sm sm:p-8"
         >
-          <div className="mb-5 flex items-center gap-2 text-sm font-medium text-slate-200">
-            <ShieldPlus className="h-4 w-4 text-brand-cyan" aria-hidden="true" />
+          <div className="mb-5 flex items-center gap-2 text-sm font-semibold text-ink">
+            <ShieldPlus className="h-4 w-4 text-ads-blue" aria-hidden="true" />
             Administrator anlegen
           </div>
 
@@ -71,7 +69,7 @@ export function SetupPage({ setupToken, minPasswordLength, onDone }: SetupPagePr
             </Alert>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-muted">
                 Es existiert noch kein Benutzer. Legen Sie jetzt das Administratorkonto an. Dies ist nur einmal möglich.
               </p>
               <TextField
@@ -81,7 +79,6 @@ export function SetupPage({ setupToken, minPasswordLength, onDone }: SetupPagePr
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 maxLength={64}
-                dark
                 icon={<UserRound className="h-4 w-4" />}
               />
               <PasswordField
@@ -91,7 +88,6 @@ export function SetupPage({ setupToken, minPasswordLength, onDone }: SetupPagePr
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 maxLength={1024}
-                dark
                 icon={<KeyRound className="h-4 w-4" />}
               />
               <PasswordField
@@ -101,15 +97,14 @@ export function SetupPage({ setupToken, minPasswordLength, onDone }: SetupPagePr
                 value={repeat}
                 onChange={(e) => setRepeat(e.target.value)}
                 maxLength={1024}
-                dark
                 icon={<KeyRound className="h-4 w-4" />}
               />
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted">
                 Mindestens {minPasswordLength} Zeichen und mindestens drei von: Kleinbuchstaben, Großbuchstaben, Ziffern,
                 Sonderzeichen. Der Benutzername darf nicht enthalten sein.
               </p>
               {error && <Alert>{error}</Alert>}
-              <Button type="submit" loading={loading} icon={<ShieldPlus className="h-4 w-4" />} className="w-full py-3">
+              <Button type="submit" loading={loading} icon={<ShieldPlus className="h-4 w-4" />} className="h-10 w-full">
                 {loading ? "Wird angelegt …" : "Administrator anlegen & anmelden"}
               </Button>
             </div>

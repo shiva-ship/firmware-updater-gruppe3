@@ -12,10 +12,13 @@ Set-Location $root
 $pyExe = $null
 $pyArgs = @()
 if (Get-Command py -ErrorAction SilentlyContinue) {
+    # Fehlende Versionen meldet py.exe über stderr; das darf hier nicht zum Abbruch führen.
+    $ErrorActionPreference = "Continue"
     foreach ($v in "3.13", "3.12", "3.11") {
         & py "-$v" -c "import sys" 2>$null
         if ($LASTEXITCODE -eq 0) { $pyExe = "py"; $pyArgs = @("-$v"); break }
     }
+    $ErrorActionPreference = "Stop"
 }
 if (-not $pyExe) {
     foreach ($candidate in @(
@@ -30,20 +33,27 @@ if (-not $pyExe) {
 }
 Write-Host "==> Python: $pyExe $pyArgs" -ForegroundColor Cyan
 
-if (-not (Test-Path ".venv\Scripts\python.exe")) {
-    if (Test-Path ".venv") { Remove-Item -Recurse -Force ".venv" }
-    Write-Host "==> Erzeuge virtuelle Umgebung .venv" -ForegroundColor Cyan
-    & $pyExe @pyArgs -m venv .venv
+# venv außerhalb von OneDrive, sonst sperrt die Synchronisation Dateien während pip installiert.
+$venvDir = Join-Path $env:LOCALAPPDATA "ADS-TEC-Security-Manager\venv"
+$venvPy = Join-Path $venvDir "Scripts\python.exe"
+if (-not (Test-Path $venvPy)) {
+    if (Test-Path $venvDir) { Remove-Item -Recurse -Force $venvDir }
+    Write-Host "==> Erzeuge virtuelle Umgebung $venvDir" -ForegroundColor Cyan
+    & $pyExe @pyArgs -m venv $venvDir
     if ($LASTEXITCODE -ne 0) { throw "venv konnte nicht erstellt werden" }
 }
 
-$venvPy = Join-Path $root ".venv\Scripts\python.exe"
 & $venvPy -m pip install --upgrade pip --quiet
 Write-Host "==> Installiere Backend-Abhängigkeiten" -ForegroundColor Cyan
 & $venvPy -m pip install -r backend\requirements.txt --quiet
 if ($LASTEXITCODE -ne 0) { throw "pip install fehlgeschlagen" }
 
 Write-Host "==> Installiere Frontend-Abhängigkeiten und baue Frontend" -ForegroundColor Cyan
+# PATH neu laden, falls Node.js nach dem Öffnen dieses Terminals installiert wurde.
+$env:Path = [Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [Environment]::GetEnvironmentVariable("Path", "User")
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    throw "npm nicht gefunden. Node.js installieren: winget install OpenJS.NodeJS.LTS"
+}
 Push-Location frontend
 npm install --no-fund --no-audit
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "npm install fehlgeschlagen" }
@@ -53,6 +63,6 @@ Pop-Location
 
 Write-Host ""
 Write-Host "Fertig. Nächste Schritte:" -ForegroundColor Green
-Write-Host "  1) Administrator anlegen:  .\.venv\Scripts\python.exe -m backend.cli create-admin --username admin"
+Write-Host "  1) Administrator anlegen:  & '$venvPy' -m backend.cli create-admin --username admin"
 Write-Host "  2) Server starten:         powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1"
 Write-Host "  3) Browser:                http://127.0.0.1:8000"

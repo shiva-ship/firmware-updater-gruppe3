@@ -1,11 +1,13 @@
 from fastapi import APIRouter
 
-from . import auth, databases, setup
+from . import auth, databases, firmware, setup, updates
 
 api_router = APIRouter()
 api_router.include_router(auth.router)
 api_router.include_router(setup.router)
 api_router.include_router(databases.router)
+api_router.include_router(firmware.router)
+api_router.include_router(updates.router)
 
 
 @api_router.get("/api/health", tags=["system"])

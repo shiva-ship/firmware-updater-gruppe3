@@ -1,46 +1,22 @@
-# --- Geheimnisse & lokale Konfiguration ---
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-*.crt
-*.pfx
-
-# --- KeePass-Datenbanken: niemals einchecken ---
+# Zugangsdaten und lokale Konfiguration
+Keypass/
 *.kdbx
-*.kdb
-*.keyx
-*.key.xml
+*.key
+.env
 
-# --- Laufzeitdaten ---
-var/
-data/
-uploads/
-*.sqlite3
-*.sqlite3-journal
-*.db
-*.log
+# Firmware-Binärdateien (zu groß für Git, Herkunft über das Manifest nachvollziehbar)
+Firmware/*.bin
+Firmware/*.bff
+!Firmware/firmware-manifest.json
 
-# --- Python ---
-.venv/
-venv/
+# Python
 __pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-*.egg-info/
-.coverage
-htmlcov/
+*.pyc
+.venv/
 
-# --- Node / Frontend ---
-node_modules/
+# Frontend
+frontend/node_modules/
 frontend/dist/
-*.tsbuildinfo
 
-# --- Editor / OS ---
-.vscode/
-.idea/
-Thumbs.db
-.DS_Store
+# Tests
+.pytest_cache/

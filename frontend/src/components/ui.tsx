@@ -1,31 +1,21 @@
-import { AlertTriangle, CheckCircle2, Eye, EyeOff, Info, Loader2 } from "lucide-react";
-import { forwardRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { AlertTriangle, CheckCircle2, Eye, EyeOff, Info, Loader2, X } from "lucide-react";
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+} from "react";
 
 export function cx(...classes: (string | false | null | undefined)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
-/** Eigenes Signet (Schild mit Prüfhaken) – kein Firmenlogo. */
-export function BrandMark({ className = "h-10 w-10" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <defs>
-        <linearGradient id="bm-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#22d3ee" />
-          <stop offset="1" stopColor="#14b8a6" />
-        </linearGradient>
-      </defs>
-      <rect width="32" height="32" rx="7" fill="#0b2547" />
-      <path
-        d="M16 5l9 3.5v6.6c0 5.6-3.8 10-9 11.9-5.2-1.9-9-6.3-9-11.9V8.5z"
-        fill="none"
-        stroke="url(#bm-g)"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
-      <path d="M12 15.5l3 3 5.5-6" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+/** ADS-TEC-Logo (lokal bereitgestellt, auf den sichtbaren Bereich zugeschnitten). */
+export function Logo({ className = "h-7" }: { className?: string }) {
+  return <img src="/adstec-logo.png" alt="ads-tec" className={cx("w-auto select-none", className)} draggable={false} />;
 }
 
 export function Spinner({ className = "h-4 w-4" }: { className?: string }) {
@@ -35,28 +25,29 @@ export function Spinner({ className = "h-4 w-4" }: { className?: string }) {
 type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 const buttonStyles: Record<ButtonVariant, string> = {
-  primary:
-    "bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-lg shadow-cyan-500/20 hover:from-cyan-400 hover:to-teal-400 focus-visible:outline-cyan-400",
-  secondary:
-    "bg-white text-navy-800 ring-1 ring-slate-300 hover:bg-slate-50 hover:ring-slate-400 focus-visible:outline-cyan-500",
-  ghost: "text-slate-600 hover:bg-slate-100 hover:text-navy-800 focus-visible:outline-cyan-500",
-  danger: "bg-white text-red-700 ring-1 ring-red-200 hover:bg-red-50 hover:ring-red-300 focus-visible:outline-red-500",
+  primary: "bg-ads-blue text-white hover:bg-ads-blue-dark focus-visible:outline-ads-cyan",
+  secondary: "bg-white text-ads-blue ring-1 ring-inset ring-line hover:bg-ads-blue-light focus-visible:outline-ads-cyan",
+  ghost: "text-muted hover:bg-ads-blue-light hover:text-ads-blue focus-visible:outline-ads-cyan",
+  danger: "bg-red-700 text-white hover:bg-red-800 focus-visible:outline-red-500",
 };
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
+  size?: "sm" | "md";
   loading?: boolean;
   icon?: ReactNode;
 }
 
-export function Button({ variant = "primary", loading, icon, className, children, disabled, ...rest }: ButtonProps) {
+export function Button({ variant = "primary", size = "md", loading, icon, className, children, disabled, ...rest }: ButtonProps) {
   return (
     <button
+      type="button"
       {...rest}
       disabled={disabled || loading}
       className={cx(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-150",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center justify-center gap-2 rounded font-semibold transition-colors",
+        size === "sm" ? "h-8 px-3 text-xs" : "h-9 px-4 text-sm",
+        "focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         buttonStyles[variant],
         className,
       )}
@@ -67,22 +58,163 @@ export function Button({ variant = "primary", loading, icon, className, children
   );
 }
 
-type AlertTone = "error" | "info" | "success";
+type AlertTone = "error" | "info" | "success" | "warning";
 
-export function Alert({ tone = "error", children, className }: { tone?: AlertTone; children: ReactNode; className?: string }) {
+export function Alert({ tone = "error", children, className, onClose }: { tone?: AlertTone; children: ReactNode; className?: string; onClose?: () => void }) {
   const styles: Record<AlertTone, string> = {
-    error: "border-red-200 bg-red-50 text-red-800",
-    info: "border-cyan-200 bg-cyan-50 text-navy-800",
-    success: "border-teal-200 bg-teal-50 text-teal-900",
+    error: "border-red-300 bg-red-50 text-red-900",
+    info: "border-ads-cyan/40 bg-ads-cyan-light text-ink",
+    success: "border-emerald-300 bg-emerald-50 text-emerald-900",
+    warning: "border-amber-300 bg-amber-50 text-amber-900",
   };
-  const Icon = tone === "error" ? AlertTriangle : tone === "success" ? CheckCircle2 : Info;
+  const Icon = tone === "error" || tone === "warning" ? AlertTriangle : tone === "success" ? CheckCircle2 : Info;
   return (
-    <div
-      role={tone === "error" ? "alert" : "status"}
-      className={cx("flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-sm animate-fade-in", styles[tone], className)}
-    >
+    <div role={tone === "error" ? "alert" : "status"} className={cx("flex items-start gap-2.5 rounded border px-3 py-2.5 text-sm", styles[tone], className)}>
       <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-      <div>{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
+      {onClose && (
+        <button type="button" onClick={onClose} aria-label="Meldung schließen" className="shrink-0 opacity-60 hover:opacity-100">
+          <X className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export type BadgeTone = "neutral" | "blue" | "green" | "amber" | "red" | "cyan";
+
+const badgeStyles: Record<BadgeTone, string> = {
+  neutral: "bg-slate-100 text-slate-700 ring-slate-300",
+  blue: "bg-ads-blue-light text-ads-blue ring-ads-blue/25",
+  green: "bg-emerald-50 text-emerald-800 ring-emerald-300",
+  amber: "bg-amber-50 text-amber-900 ring-amber-300",
+  red: "bg-red-50 text-red-800 ring-red-300",
+  cyan: "bg-ads-cyan-light text-[#00618b] ring-ads-cyan/40",
+};
+
+export function Badge({ tone = "neutral", children, className, title }: { tone?: BadgeTone; children: ReactNode; className?: string; title?: string }) {
+  return (
+    <span
+      title={title}
+      className={cx("inline-flex items-center gap-1 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset", badgeStyles[tone], className)}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Statuspunkt mit Text – sachliche Zustandsanzeige. */
+export function StatusDot({ tone, children }: { tone: BadgeTone; children: ReactNode }) {
+  const dot: Record<BadgeTone, string> = {
+    neutral: "bg-slate-400",
+    blue: "bg-ads-blue",
+    green: "bg-emerald-600",
+    amber: "bg-amber-500",
+    red: "bg-red-600",
+    cyan: "bg-ads-cyan",
+  };
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+      <span className={cx("h-2 w-2 shrink-0 rounded-full", dot[tone])} aria-hidden="true" />
+      {children}
+    </span>
+  );
+}
+
+/** Checkbox mit Zwischenzustand („teilweise ausgewählt“). */
+export function Checkbox({
+  checked,
+  indeterminate = false,
+  onChange,
+  label,
+  className,
+  disabled,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+  className?: string;
+  disabled?: boolean;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate && !checked;
+  }, [indeterminate, checked]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      aria-label={label}
+      title={label}
+      checked={checked}
+      disabled={disabled}
+      aria-checked={indeterminate && !checked ? "mixed" : checked}
+      onChange={(e) => onChange(e.target.checked)}
+      onClick={(e) => e.stopPropagation()}
+      className={cx("h-4 w-4 shrink-0 cursor-pointer rounded-sm border-line", className)}
+    />
+  );
+}
+
+export function Panel({ title, actions, children, className, bodyClassName }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
+  return (
+    <section className={cx("flex min-h-0 flex-col rounded border border-line bg-white", className)}>
+      {(title || actions) && (
+        <header className="flex min-h-11 items-center justify-between gap-3 border-b border-line px-4 py-2">
+          <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ads-blue">{title}</h2>
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        </header>
+      )}
+      <div className={cx("min-h-0 flex-1", bodyClassName)}>{children}</div>
+    </section>
+  );
+}
+
+/** Modaler Dialog im Anwendungsstil (ohne Einblend-Animation). */
+export function Dialog({
+  open,
+  title,
+  subtitle,
+  onClose,
+  closable = true,
+  width = "max-w-lg",
+  children,
+  footer,
+}: {
+  open: boolean;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  onClose: () => void;
+  closable?: boolean;
+  width?: string;
+  children: ReactNode;
+  footer?: ReactNode;
+}) {
+  useEffect(() => {
+    if (!open || !closable) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, closable, onClose]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/45 p-4 sm:p-8" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label={typeof title === "string" ? title : undefined} className={cx("w-full rounded border border-line bg-white shadow-xl", width)}>
+        <header className="flex items-start gap-3 border-b-2 border-ads-blue px-5 py-3.5">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold text-ink">{title}</h2>
+            {subtitle && <div className="mt-0.5 text-xs text-muted">{subtitle}</div>}
+          </div>
+          {closable && (
+            <button type="button" onClick={onClose} className="-mr-1 rounded p-1 text-muted hover:bg-surface hover:text-ink" aria-label="Schließen">
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </header>
+        <div className="px-5 py-4">{children}</div>
+        {footer && <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-line bg-surface px-5 py-3">{footer}</footer>}
+      </div>
     </div>
   );
 }
@@ -90,47 +222,30 @@ export function Alert({ tone = "error", children, className }: { tone?: AlertTon
 interface FieldProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   icon?: ReactNode;
-  dark?: boolean;
+  hint?: ReactNode;
 }
 
 const fieldBase =
-  "block w-full rounded-lg py-2.5 pr-3 text-sm transition focus:outline-none focus:ring-2 disabled:opacity-60";
-const fieldLight = "bg-white text-slate-900 ring-1 ring-slate-300 placeholder:text-slate-400 focus:ring-cyan-500";
-const fieldDark =
-  "bg-navy-950/60 text-white ring-1 ring-white/15 placeholder:text-slate-500 focus:ring-brand-cyan";
+  "block h-9 w-full rounded bg-white pr-3 text-sm text-ink ring-1 ring-inset ring-line placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-ads-cyan disabled:opacity-60";
 
-export const TextField = forwardRef<HTMLInputElement, FieldProps>(function TextField(
-  { label, icon, dark, className, id, ...rest },
-  ref,
-) {
+export const TextField = forwardRef<HTMLInputElement, FieldProps>(function TextField({ label, icon, hint, className, id, ...rest }, ref) {
   return (
     <label className="block" htmlFor={id}>
-      <span className={cx("mb-1.5 block text-xs font-semibold uppercase tracking-wider", dark ? "text-slate-300" : "text-slate-600")}>
-        {label}
-      </span>
+      <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
       <span className="relative block">
         {icon && <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">{icon}</span>}
-        <input
-          ref={ref}
-          id={id}
-          {...rest}
-          className={cx(fieldBase, dark ? fieldDark : fieldLight, icon ? "pl-10" : "pl-3", className)}
-        />
+        <input ref={ref} id={id} {...rest} className={cx(fieldBase, icon ? "pl-9" : "pl-3", className)} />
       </span>
+      {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
     </label>
   );
 });
 
-export const PasswordField = forwardRef<HTMLInputElement, Omit<FieldProps, "type">>(function PasswordField(
-  { label, icon, dark, className, id, ...rest },
-  ref,
-) {
+export const PasswordField = forwardRef<HTMLInputElement, Omit<FieldProps, "type">>(function PasswordField({ label, icon, hint, className, id, ...rest }, ref) {
   const [visible, setVisible] = useState(false);
   return (
     <label className="block" htmlFor={id}>
-      <span className={cx("mb-1.5 block text-xs font-semibold uppercase tracking-wider", dark ? "text-slate-300" : "text-slate-600")}>
-        {label}
-      </span>
+      <span className="mb-1 block text-xs font-semibold text-muted">{label}</span>
       <span className="relative block">
         {icon && <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">{icon}</span>}
         <input
@@ -141,18 +256,29 @@ export const PasswordField = forwardRef<HTMLInputElement, Omit<FieldProps, "type
           autoCapitalize="off"
           autoCorrect="off"
           {...rest}
-          className={cx(fieldBase, dark ? fieldDark : fieldLight, icon ? "pl-10" : "pl-3", "pr-11", className)}
+          className={cx(fieldBase, icon ? "pl-9" : "pl-3", "pr-10", className)}
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          className="absolute inset-y-0 right-1 my-1 flex items-center rounded-md px-2.5 text-slate-400 transition hover:text-cyan-600 focus-visible:outline-2 focus-visible:outline-cyan-500"
+          className="absolute inset-y-0 right-1 my-1 flex items-center rounded px-2 text-slate-400 hover:text-ads-blue focus-visible:outline-2 focus-visible:outline-ads-cyan"
           aria-label={visible ? "Passwort verbergen" : "Passwort anzeigen"}
           aria-pressed={visible}
         >
           {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
         </button>
       </span>
+      {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
     </label>
   );
 });
+
+export function ProgressBar({ value, tone = "blue", label }: { value: number; tone?: "blue" | "green" | "red" | "amber"; label?: string }) {
+  const color = { blue: "bg-ads-blue", green: "bg-emerald-600", red: "bg-red-600", amber: "bg-amber-500" }[tone];
+  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-sm bg-slate-200" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+      <div className={cx("h-full", color)} style={{ width: `${pct}%` }} />
+    </div>
+  );
+}

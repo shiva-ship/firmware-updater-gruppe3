@@ -1,21 +1,32 @@
 """Verwaltet hochgeladene KeePass-Datenbanken je Benutzersitzung.
 
-Nach dem Entsperren wird ausschließlich die Metadaten-Baumstruktur im Speicher gehalten.
-Das PyKeePass-Objekt (mit entschlüsselten Passwörtern) und das Masterpasswort werden
-sofort verworfen. Spätere Funktionen (Geräte-APIs etc.) öffnen die Datei bei Bedarf erneut.
+Nach dem Entsperren werden die Metadaten-Baumstruktur und die geschwärzten Notizen im Speicher
+gehalten. Das Masterpasswort und das PyKeePass-Objekt werden sofort verworfen.
+
+Die Login-Daten der angezeigten Geräte werden zusätzlich für ``credential_ttl`` Sekunden nur im
+Arbeitsspeicher zwischengespeichert, damit Vorbereiten und Freigabe ohne erneute Eingabe des
+Masterpassworts möglich sind. Sie werden nie auf die Festplatte geschrieben und beim Schließen
+der Datei, beim Abmelden, nach Ablauf der Frist oder beim Serverende gelöscht.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 
-from backend.errors import DatabaseLimitReached, DatabaseLocked, DatabaseNotFound, InvalidDatabaseFile, InvalidMasterPassword
+from backend.errors import (
+    DatabaseLimitReached,
+    DatabaseLocked,
+    DatabaseNotFound,
+    InvalidDatabaseFile,
+    InvalidMasterPassword,
+)
 
 from .storage import UploadStorage
 from .tree import GroupNode, build_tree
@@ -40,6 +51,40 @@ class DatabaseHandle:
     status: DatabaseStatus = DatabaseStatus.LOCKED
     unlocked_at: datetime | None = None
     tree: GroupNode | None = None
+    # Geschwärzte Notizen je Eintrags-UUID: (Text, wurde geschwärzt)
+    notes: dict[str, tuple[str, bool]] = field(default_factory=dict)
+    # Zwischengespeicherte Login-Daten (nur RAM) und Ablaufzeitpunkt (time.monotonic)
+    access: dict[str, "DeviceAccess"] = field(default_factory=dict, repr=False)
+    access_until: float = 0.0
+
+
+@dataclass(frozen=True)
+class DeviceAccess:
+    """Zugangsdaten für den Gerätetreiber. Nur im Backend, nie im Frontend oder im Log.
+    Benutzername/Passwort dürfen fehlen (z. B. SPS ohne Anmeldung) – der Treiber prüft selbst."""
+
+    entry_id: str
+    title: str
+    base_url: str
+    username: str = ""
+    password: str = field(default="", repr=False)
+    extra: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def complete(self) -> bool:
+        return bool(self.base_url and self.username and self.password)
+
+
+def access_from_entry(entry) -> DeviceAccess:
+    custom = entry.custom_properties or {}
+    return DeviceAccess(
+        entry_id=str(entry.uuid),
+        title=entry.title or "",
+        base_url=(custom.get("base_url") or entry.url or "").strip(),
+        username=entry.username or "",
+        password=entry.password or "",
+        extra={k: str(v) for k, v in custom.items() if k.casefold() in {"rack", "slot"} and v is not None},
+    )
 
 
 def open_keepass(path: Path, master_password: str):
@@ -57,8 +102,10 @@ def open_keepass(path: Path, master_password: str):
 
 
 class KeePassSessionManager:
-    def __init__(self, storage: UploadStorage, max_per_session: int) -> None:
+    def __init__(self, storage: UploadStorage, max_per_session: int, credential_ttl: float = 1800, clock=time.monotonic) -> None:
         self._storage = storage
+        self._credential_ttl = credential_ttl
+        self._clock = clock
         self._max_per_session = max_per_session
         self._handles: dict[str, DatabaseHandle] = {}
         self._lock = threading.Lock()
@@ -111,8 +158,12 @@ class KeePassSessionManager:
             raise DatabaseNotFound()
         with lock:
             kp = open_keepass(handle.path, master_password)
+            notes: dict[str, tuple[str, bool]] = {}
             try:
-                tree = build_tree(kp)
+                tree = build_tree(kp, notes)
+                # Login-Daten nur für die angezeigten Geräte zwischenspeichern
+                shown = {e.id for e, _ in tree.iter_entries_with_path()}
+                access = {str(e.uuid): access_from_entry(e) for e in kp.entries if str(e.uuid) in shown}
             finally:
                 del kp
             # Falls die Datenbank währenddessen geschlossen wurde:
@@ -120,16 +171,58 @@ class KeePassSessionManager:
                 if db_id not in self._handles:
                     raise DatabaseNotFound()
                 handle.tree = tree
+                handle.notes = notes
+                handle.access = access
+                handle.access_until = self._clock() + self._credential_ttl
                 handle.status = DatabaseStatus.UNLOCKED
                 handle.unlocked_at = datetime.now(timezone.utc)
         return handle
 
     def verify_master_password(self, db_id: str, session_id: str, user_id: int, master_password: str) -> None:
-        """Reine Freigabeprüfung (z. B. künftig vor einem Firmwareupdate): öffnet die Datei,
-        verwirft das Ergebnis sofort und wirft ``InvalidMasterPassword`` bei falschem Passwort."""
+        """Prüft das Masterpasswort serverseitig (wirft InvalidMasterPassword)."""
         handle = self.get(db_id, session_id, user_id)
         kp = open_keepass(handle.path, master_password)
         del kp
+
+    def cached_access(self, db_id: str, session_id: str, user_id: int, entry_ids: list[str]) -> dict[str, DeviceAccess] | None:
+        """Zwischengespeicherte Login-Daten, oder None, wenn die Frist abgelaufen ist."""
+        handle = self.get(db_id, session_id, user_id)
+        with self._lock:
+            if not handle.access or handle.access_until <= self._clock():
+                handle.access = {}
+                return None
+            return {i: handle.access[i] for i in entry_ids if i in handle.access}
+
+    def purge_expired_access(self) -> None:
+        now = self._clock()
+        with self._lock:
+            for handle in self._handles.values():
+                if handle.access and handle.access_until <= now:
+                    handle.access = {}
+
+    def read_device_access(
+        self, db_id: str, session_id: str, user_id: int, master_password: str, entry_ids: list[str]
+    ) -> dict[str, DeviceAccess]:
+        """Liest die Zugangsdaten mehrerer Einträge in einem Durchgang. Unbekannte IDs fehlen im Ergebnis."""
+        handle = self.get(db_id, session_id, user_id)
+        kp = open_keepass(handle.path, master_password)
+        result: dict[str, DeviceAccess] = {}
+        try:
+            for entry_id in entry_ids:
+                try:
+                    entry_uuid = uuid.UUID(entry_id)
+                except ValueError:
+                    continue
+                entry = kp.find_entries(uuid=entry_uuid, first=True)
+                if entry is not None:
+                    result[entry_id] = access_from_entry(entry)
+        finally:
+            del kp
+        return result
+
+    def get_notes(self, db_id: str, session_id: str, user_id: int, entry_id: str) -> tuple[str, bool] | None:
+        handle, _ = self.get_tree(db_id, session_id, user_id)
+        return handle.notes.get(entry_id)
 
     def get_tree(self, db_id: str, session_id: str, user_id: int) -> tuple[DatabaseHandle, GroupNode]:
         handle = self.get(db_id, session_id, user_id)
@@ -160,4 +253,6 @@ class KeePassSessionManager:
             self._unlock_locks.pop(db_id, None)
         if handle is not None:
             handle.tree = None
+            handle.notes = {}
+            handle.access = {}
             self._storage.delete(handle.path)
